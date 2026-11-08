@@ -1,0 +1,12 @@
+robots.txt
+sitemap.xml
+sitemap_index.xml
+favicon.ico
+.well-known/security.txt
+api
+api/v1
+openapi.json
+swagger.json
+docs
+health
+status

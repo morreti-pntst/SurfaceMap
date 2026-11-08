@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+ROOT="$(dirname "$(readlink -f -- "${BASH_SOURCE[0]}")")"
+cd "$ROOT"
+DOCKER=(docker)
+COMPOSE=(docker compose -f compose.yaml)
+usage() { echo 'Usage: surfacemap {start|stop|restart|status|logs|update|doctor|tools|version|help} [service]'; }
+need_docker() {
+  command -v docker >/dev/null 2>&1 || { echo '[!] Docker is not installed. Install Docker Engine/Desktop with Compose v2.'; exit 1; }
+  select_docker
+  "${DOCKER[@]}" info >/dev/null 2>&1 || { echo '[!] Docker Engine is not reachable. Start Docker Desktop/Engine and retry.'; exit 1; }
+  "${DOCKER[@]}" compose version >/dev/null 2>&1 || { echo '[!] Docker Compose v2 is required.'; exit 1; }
+}
+select_docker() {
+  if ! docker info >/dev/null 2>&1 && [[ "$(id -u)" != 0 ]] && command -v sudo >/dev/null; then
+    DOCKER=(sudo docker)
+    COMPOSE=("${DOCKER[@]}" compose -f compose.yaml)
+  fi
+}
+dashboard_url() {
+  local binding
+  binding="$("${COMPOSE[@]}" port web 80 2>/dev/null)" || return 1
+  printf 'http://127.0.0.1:%s' "${binding##*:}"
+}
+show_ready() {
+  local url
+  url="$(dashboard_url)"
+  echo "Dashboard: $url"
+  echo "API:       $url/api/docs"
+}
+cmd="${1:-help}"
+ensure_config() {
+  if [[ ! -f .env ]]; then cp .env.example .env; echo '[+] Created .env'; fi
+}
+case "$cmd" in
+  start)
+    need_docker
+    mkdir -p .data
+    ensure_config
+    if "${DOCKER[@]}" image inspect surfacemap-api:latest surfacemap-worker:latest surfacemap-web:latest >/dev/null 2>&1; then
+      echo '[+] Starting services from the locally built images...'
+      "${COMPOSE[@]}" up -d --no-build --pull never --wait --wait-timeout 120
+    else
+      echo '[+] Building and starting services...'
+      "${COMPOSE[@]}" up -d --build --wait --wait-timeout 120
+    fi
+    show_ready
+    ;;
+  stop)
+    need_docker
+    "${COMPOSE[@]}" down --remove-orphans
+    echo 'SurfaceMap stopped. Its port is released and project data is kept.'
+    ;;
+  restart) bash "$ROOT/surfacemap" stop; bash "$ROOT/surfacemap" start ;;
+  status)
+    need_docker
+    "${COMPOSE[@]}" ps
+    if url="$(dashboard_url)"; then
+      if curl -fsS "$url/api/system/status"; then echo; else echo '[!] API status is unavailable; inspect surfacemap logs api'; fi
+      if curl -fsS "$url/api/tools"; then echo; else echo '[!] Tool Manager status is unavailable until the API is ready'; fi
+    else
+      echo 'SurfaceMap is stopped. Run surfacemap start to launch it.'
+    fi
+    ;;
+  logs)
+    need_docker
+    "${COMPOSE[@]}" logs -f "${@:2}"
+    ;;
+  update) need_docker; ensure_config; "${COMPOSE[@]}" pull db redis; "${COMPOSE[@]}" up -d --build --wait --wait-timeout 120; show_ready ;;
+  doctor)
+    failures=0
+    if command -v docker >/dev/null 2>&1; then
+      select_docker
+      echo '[OK] Docker CLI found'
+      if "${DOCKER[@]}" info >/dev/null 2>&1; then echo '[OK] Docker Engine reachable'; else echo '[FAIL] Docker Engine is not reachable; start Docker Desktop/Engine'; failures=$((failures + 1)); fi
+      if "${DOCKER[@]}" compose version >/dev/null 2>&1; then "${DOCKER[@]}" compose version; else echo '[FAIL] Docker Compose v2 is unavailable'; failures=$((failures + 1)); fi
+    else echo '[FAIL] Docker CLI missing; install Docker Engine/Desktop with Compose v2'; failures=$((failures + 1)); fi
+    if command -v curl >/dev/null 2>&1; then echo '[OK] curl available'; else echo '[WARN] curl missing; startup health wait unavailable'; fi
+    if command -v curl >/dev/null 2>&1; then
+      if curl -fsSI --max-time 6 https://github.com >/dev/null 2>&1; then echo '[OK] GitHub releases endpoint reachable'; else echo '[WARN] GitHub is unreachable; pinned Go tool installation or updates may fail'; fi
+      if curl -fsSI --max-time 6 https://nmap.org/dist/ >/dev/null 2>&1; then echo '[OK] Official Nmap release endpoint reachable'; else echo '[WARN] Nmap release endpoint is unreachable; Nmap install/update may fail'; fi
+    fi
+    if command -v df >/dev/null 2>&1; then
+      free_mb="$(df -Pm . | awk 'NR==2 {print $4}')"
+      if [[ "$free_mb" =~ ^[0-9]+$ ]] && (( free_mb >= 2048 )); then echo "[OK] ${free_mb} MiB free on the project filesystem"; else echo "[FAIL] Less than 2 GiB free on the project filesystem (${free_mb:-unknown} MiB)"; failures=$((failures + 1)); fi
+    else echo '[WARN] Cannot check free disk space (df unavailable)'; fi
+    if [[ -f .env ]]; then echo '[OK] .env exists'; else echo '[INFO] .env will be created on start'; fi
+    if command -v docker >/dev/null 2>&1 && "${DOCKER[@]}" compose version >/dev/null 2>&1; then
+      if [[ -f .env ]]; then
+        if "${COMPOSE[@]}" config --quiet; then echo '[OK] Compose configuration is valid'; else echo '[FAIL] Compose configuration is invalid; review .env and compose.yaml'; failures=$((failures + 1)); fi
+        if "${DOCKER[@]}" info >/dev/null 2>&1; then "${COMPOSE[@]}" ps; fi
+      else echo '[INFO] Compose config check skipped until .env is created'; fi
+    fi
+    if (( failures > 0 )); then echo "[!] Doctor found ${failures} blocking issue(s). Follow the recommendations above."; exit 1; fi
+    echo '[OK] No blocking environment issue found'
+    ;;
+  tools)
+    need_docker
+    if url="$(dashboard_url)" && curl -fsS "$url/api/tools"; then echo; else echo '[!] SurfaceMap API is not reachable. Run surfacemap start first.'; exit 1; fi
+    ;;
+  version) echo 'SURFACEMAP 0.6.0' ;;
+  help|-h|--help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac

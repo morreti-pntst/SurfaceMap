@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!DOCTYPE nmaprun>
+<nmaprun scanner="nmap" args="nmap -sV -oX sample-nmap.xml example.test" start="1731000000">
+  <host>
+    <status state="up" />
+    <address addr="192.0.2.42" addrtype="ipv4" />
+    <hostnames><hostname name="app.example.test" type="user" /></hostnames>
+    <ports>
+      <port protocol="tcp" portid="443"><state state="open" /><service name="https" product="nginx" version="1.26.2" tunnel="ssl" /></port>
+      <port protocol="tcp" portid="22"><state state="open" /><service name="ssh" product="OpenSSH" version="9.6" /></port>
+      <port protocol="tcp" portid="8080"><state state="closed" /></port>
+    </ports>
+  </host>
+  <host>
+    <status state="up" />
+    <address addr="198.51.100.17" addrtype="ipv4" />
+    <hostnames><hostname name="status.example.test" type="user" /></hostnames>
+    <ports>
+      <port protocol="tcp" portid="80"><state state="open" /><service name="http" product="Apache httpd" version="2.4.58" /></port>
+    </ports>
+  </host>
+</nmaprun>

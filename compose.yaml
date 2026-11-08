@@ -1,0 +1,90 @@
+name: surfacemap
+services:
+  data-init:
+    image: python:3.12-slim
+    user: "0:0"
+    command: ["sh", "-c", "mkdir -p /data/tools/versions /data/artifacts /data/wordlists /data/tools/gopath /data/tools/gomodcache /data/tools/gocache && chown -R 10001:10001 /data"]
+    volumes:
+      - app_data:/data
+    restart: "no"
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-surfacemap}
+      POSTGRES_USER: ${POSTGRES_USER:-surfacemap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-local-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-surfacemap} -d ${POSTGRES_DB:-surfacemap}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://surfacemap:change-this-local-password@db:5432/surfacemap}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SURFACEMAP_TOOLS_DIR: /data/tools
+      SURFACEMAP_ARTIFACTS_DIR: /data/artifacts
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      data-init: { condition: service_completed_successfully }
+    volumes:
+      - app_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+  worker:
+    build: ./backend
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=INFO", "--concurrency=2", "--beat", "--schedule=/tmp/surfacemap-tool-recovery"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://surfacemap:change-this-local-password@db:5432/surfacemap}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SURFACEMAP_TOOLS_DIR: /data/tools
+      SURFACEMAP_ARTIFACTS_DIR: /data/artifacts
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      data-init: { condition: service_completed_successfully }
+    volumes:
+      - app_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.worker.celery_app inspect ping --timeout=3 | grep -q pong"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+  web:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:${API_PORT:-8080}:80"
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+volumes:
+  postgres_data:
+  redis_data:
+  app_data:
