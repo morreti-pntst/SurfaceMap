@@ -4,7 +4,7 @@
 
 [English](README.md) · **Русский**
 
-[Установка](#setup) · [Первый аудит](#audit) · [Команды](#commands) · [Решение проблем](#troubleshooting) · [Удаление](#uninstall) · [Лицензия](#licensing)
+[Установка](#setup) · [Первый аудит](#audit) · [Команды](#commands) · [Решение проблем](#troubleshooting) · [Удаление](#uninstall) · [Лицензия](#licensing) · [Донаты](#donate)
 
 SurfaceMap собирает результаты сканеров в одном проекте. Проследите связи между доменами, IP-адресами, сервисами, веб-маршрутами и находками. Запустите готовый аудит, настройте отдельный сканер или импортируйте результаты уже проведённой проверки.
 
@@ -111,3 +111,14 @@ SurfaceMap работает локально в режиме одного пол
 [Архитектура](docs/architecture.md) · [Сканеры](docs/tool-adapters.md) · [Вклад в проект](CONTRIBUTING.md) · [Сообщить об уязвимости](SECURITY.md)
 
 Разработчик **morreti**. Общие вопросы: [alsocwa@proton.me](mailto:alsocwa@proton.me).
+
+<a id="donate"></a>
+
+## Поддержать разработку
+
+Пожертвования добровольные. Все функции и доступ к проекту доступны без доната.
+
+| Валюта и сеть | Адрес |
+| --- | --- |
+| BTC · сеть Bitcoin | `bc1qwxw3jqhaeqw775ak3uz73f3gz6rrclc9r5wk30` |
+| USDT · сеть TRON (TRC20) | `TLszHvFPkRi7jrTBmuUmSbx5epoJk1jiKK` |

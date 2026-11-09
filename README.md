@@ -4,7 +4,7 @@
 
 **English** · [Русский](README.ru.md)
 
-[Quick start](#quick-start) · [First audit](#run-your-first-assessment) · [Commands](#terminal-commands) · [Troubleshooting](#troubleshooting) · [Uninstall](#uninstall) · [Licensing](#licensing)
+[Quick start](#quick-start) · [First audit](#run-your-first-assessment) · [Commands](#terminal-commands) · [Troubleshooting](#troubleshooting) · [Uninstall](#uninstall) · [Licensing](#licensing) · [Donations](#support-development)
 
 Follow the evidence from a domain or IP address to a service, endpoint, or finding. Run a guided audit, launch individual scanners with editable presets, or import existing output.
 
@@ -127,3 +127,12 @@ SurfaceMap is **source-available** under the [SurfaceMap Community License v1.0]
 [Architecture](docs/architecture.md) · [Tool adapters](docs/tool-adapters.md) · [Development](docs/development.md) · [Contributing](CONTRIBUTING.md) · [Security reports](SECURITY.md)
 
 Developed by **morreti**. General inquiries: [alsocwa@proton.me](mailto:alsocwa@proton.me).
+
+## Support development
+
+Donations are voluntary and do not unlock features or access.
+
+| Asset and network | Address |
+| --- | --- |
+| BTC · Bitcoin mainnet | `bc1qwxw3jqhaeqw775ak3uz73f3gz6rrclc9r5wk30` |
+| USDT · TRON (TRC20) | `TLszHvFPkRi7jrTBmuUmSbx5epoJk1jiKK` |
