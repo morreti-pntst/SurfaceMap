@@ -93,13 +93,16 @@ if ($env:SURFACEMAP_INSTALL_TIMEOUT_SECONDS -and (
     -not [int]::TryParse($env:SURFACEMAP_INSTALL_TIMEOUT_SECONDS, [ref]$seconds) -or $seconds -lt 0
 )) { throw 'SURFACEMAP_INSTALL_TIMEOUT_SECONDS must be a non-negative integer.' }
 $deadline = (Get-Date).AddSeconds($seconds)
-$previous = -1
+$previous = ''
 do {
-    $tools = @()
-    try { $tools = Invoke-RestMethod "$url/api/tools" -TimeoutSec 8 } catch {}
-    $installed = @($tools | Where-Object { $_.active_adapter -and $_.status -eq 'installed' }).Count
-    if ($installed -ne $previous) { Write-Host "Ready tools: $installed/8"; $previous = $installed }
-    if ($installed -eq 8) { Write-Host "SurfaceMap and all tools are ready at $url"; exit 0 }
+    try {
+        $progress = (Invoke-WebRequest "$url/api/tools/setup-progress" -UseBasicParsing -TimeoutSec 12).Content.Trim()
+    } catch {
+        $progress = 'Tool setup status unavailable. Check Docker with: docker compose logs --tail 50 worker api'
+    }
+    if ($progress -ne $previous) { Write-Host $progress; $previous = $progress }
+    if ($progress -eq 'Ready tools: 8/8') { Write-Host "SurfaceMap and all tools are ready at $url"; exit 0 }
+    if ($progress.Contains('Setup needs attention.')) { throw "SurfaceMap is running at $url. See the adapter status above." }
     if ((Get-Date) -lt $deadline) { Start-Sleep -Seconds 5 }
 } while ((Get-Date) -lt $deadline)
-throw "Tool setup is still incomplete. Open $url and review Tool Manager, then rerun the installer."
+throw "SurfaceMap is running at $url. Some tools are still pending or failed. See the last status above and Tool Manager. Rerun with -UseExistingImages to check again."

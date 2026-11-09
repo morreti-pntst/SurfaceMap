@@ -13,7 +13,7 @@ from urllib.parse import parse_qsl, urlsplit
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from kombu.exceptions import OperationalError as BrokerUnavailable
 from sqlalchemy import case, func, or_, select, text, union
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -33,7 +33,7 @@ from .surface_builder import (
 )
 from .tool_manager import binary_path, installed_version
 from .tool_operations import DEFAULT_TOOL_SETTINGS
-from .tool_registry import TOOL_BY_ID, TOOLS, bounded_option, public_tool, version_tuple
+from .tool_registry import TOOL_BY_ID, TOOLS, bounded_option, public_tool
 from .wrapped_ports import HOST_TYPES, LEGACY_WRAPPED_SUFFIX, MAP_WRAPPED_LIMIT, observed_wrapped_ports
 
 app = FastAPI(title="SURFACEMAP API", version="0.6.0", docs_url=None, redoc_url=None,
@@ -68,7 +68,7 @@ def queue_missing_priority_tools():
             if not (tool.module or tool.id == "nmap"):
                 continue
             current = installed_version(tool)
-            if current and version_tuple(current) >= version_tuple(tool.version):
+            if current == tool.version.lstrip("v"):
                 continue
             if not preferences["automatic_updates"] or not preferences["update_stable_releases"]:
                 continue
@@ -261,20 +261,54 @@ def _tool_status(tool):
 
 @app.get("/api/tools", tags=["tools"])
 def list_tools(db: Session = Depends(get_db)):
-    latest_ops: dict[str, ToolOperation] = {}
-    for op in db.scalars(select(ToolOperation).order_by(ToolOperation.created_at.desc())).all():
-        latest_ops.setdefault(op.tool_id, op)
+    latest_ids = select(func.max(ToolOperation.id)).group_by(ToolOperation.tool_id)
+    latest_ops = {op.tool_id: op for op in db.scalars(
+        select(ToolOperation).where(ToolOperation.id.in_(latest_ids))
+    )}
     response = []
     for tool in TOOLS:
         status_data = _tool_status(tool)
-        if not status_data["version"] and tool.id in latest_ops:
-            operation = latest_ops[tool.id]
-            if operation.status in {"queued", "running"}:
-                status_data["status"] = "installing"
-            elif operation.status == "failed":
-                status_data["status"] = "failed"
+        operation = latest_ops.get(tool.id)
+        if operation:
+            if not status_data["version"]:
+                if operation.status in {"queued", "running"}:
+                    status_data["status"] = "installing"
+                elif operation.status == "failed":
+                    status_data["status"] = "failed"
+            if operation.status in {"queued", "running", "failed"}:
+                log = operation.log.strip().splitlines()
+                status_data["operation"] = {
+                    "id": operation.id, "action": operation.action, "status": operation.status,
+                    "version": operation.version, "progress": log[-1][:240] if log else "",
+                    "error": operation.error,
+                }
         response.append(status_data)
     return response
+
+
+@app.get("/api/tools/setup-progress", response_class=PlainTextResponse, tags=["tools"])
+def tool_setup_progress(db: Session = Depends(get_db)):
+    adapters = [tool for tool in list_tools(db) if tool["active_adapter"]]
+    ready = sum(tool["status"] == "installed" for tool in adapters)
+    lines = [f"Ready tools: {ready}/{len(adapters)}"]
+    for tool in adapters:
+        if tool["status"] == "installed":
+            continue
+        op = tool.get("operation")
+        if op:
+            detail = op["error"] if op["status"] == "failed" else op["progress"]
+            summary = f"{op['action']} {op['version']} {op['status']} (#{op['id']})"
+        else:
+            summary = tool["status"].replace("_", " ")
+            detail = ""
+        version = f" · detected {tool['version']}, required {tool['latest_version']}" if tool["version"] else ""
+        detail = " ".join(detail.split())[:350]
+        lines.append(f"  {tool['name']}: {summary}{version}" + (f" · {detail}" if detail else ""))
+    if ready < len(adapters) and not any(
+        tool.get("operation", {}).get("status") in {"queued", "running"} for tool in adapters
+    ):
+        lines.append("Setup needs attention. Open Tool Manager for errors and use Install or update all adapters to retry.")
+    return "\n".join(lines) + "\n"
 
 @app.get("/api/tool-operations", response_model=list[ToolOperationRead], tags=["tools"])
 def list_tool_operations(limit: int = 100, db: Session = Depends(get_db)):
@@ -343,9 +377,16 @@ def _queue_tool_operation(tool_id: str, action: str, db: Session):
         raise HTTPException(409, "This tool is part of the application image and is updated with `surfacemap update`.")
     if db.bind.dialect.name == "postgresql":
         db.execute(text("SELECT pg_advisory_xact_lock(90713)"))
-    active = db.scalar(select(ToolOperation.id).where(ToolOperation.tool_id == tool_id, ToolOperation.status.in_(["queued", "running"])).limit(1))
+    active = db.scalar(select(ToolOperation).where(
+        ToolOperation.tool_id == tool_id, ToolOperation.status.in_(["queued", "running"]),
+    ).order_by(ToolOperation.id.desc()).limit(1))
     if active:
-        raise HTTPException(409, "A tool operation is already queued or running for this adapter")
+        if active.version == tool.version and (active.action == action or (
+            active.action in {"install", "update", "reinstall"} and action in {"install", "update", "reinstall"}
+        )):
+            return active
+        raise HTTPException(409, f"{tool.name} operation #{active.id} ({active.action}) is {active.status}. "
+                                 "Open Tool Manager → Installation history to follow its progress.")
     if action == "install" and installed_version(tool):
         raise HTTPException(409, "Tool is already installed")
     operation = ToolOperation(tool_id=tool_id, action=action, version=tool.version, status="queued")
@@ -367,7 +408,7 @@ def install_all_tools(db: Session = Depends(get_db)):
     operations = []
     for tool in TOOLS:
         current = installed_version(tool)
-        if (tool.module or tool.id == "nmap") and (not current or version_tuple(current) < version_tuple(tool.version)):
+        if (tool.module or tool.id == "nmap") and current != tool.version.lstrip("v"):
             try:
                 operations.append(_queue_tool_operation(tool.id, "update" if current else "install", db))
             except HTTPException as exc:

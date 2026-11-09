@@ -1,3 +1,4 @@
+import re
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
@@ -67,8 +68,12 @@ def reconcile_tool_operations() -> list[int]:
                 continue
             if latest.version != tool.version or not is_transient_install_error(latest.error + "\n" + latest.log):
                 continue
+            previous_retry = re.search(r"^Automatic retry (\d+)/3 ", latest.log, re.MULTILINE)
+            attempt = int(previous_retry.group(1)) + 1 if previous_retry else 1
+            if attempt > 3:
+                continue
             retry = ToolOperation(tool_id=tool_id, action=latest.action, version=latest.version,
-                                  status="queued", log=f"Automatic retry of operation #{latest.id}.")
+                                  status="queued", log=f"Automatic retry {attempt}/3 of operation #{latest.id}.")
             db.add(retry)
             db.flush()
             pending.append(retry.id)
@@ -88,6 +93,14 @@ def run_tool_operation(operation_id: int) -> dict:
         return _run_tool_operation(operation_id)
 
 
+def _append_log(operation: ToolOperation, message: str) -> None:
+    header, _, body = operation.log.partition("\n")
+    if header.startswith("Automatic retry "):
+        operation.log = header + "\n" + (body + "\n" + message)[-(19999 - len(header)):]
+    else:
+        operation.log = (operation.log + "\n" + message)[-20000:]
+
+
 def _run_tool_operation(operation_id: int) -> dict:
     with SessionLocal() as db:
         operation = db.get(ToolOperation, operation_id)
@@ -102,13 +115,13 @@ def _run_tool_operation(operation_id: int) -> dict:
             db.commit()
             return {"status": "failed", "error": operation.error}
         if operation.status == "running":
-            operation.log = (operation.log + "\nResuming interrupted installation.")[-20000:]
+            _append_log(operation, "Resuming interrupted installation.")
         operation.status = "running"
         db.commit()
         def emit(message: str):
             current = db.get(ToolOperation, operation_id)
             if current:
-                current.log = (current.log + "\n" + message)[-20000:]
+                _append_log(current, message)
                 db.commit()
         try:
             tool = TOOL_BY_ID[operation.tool_id]
@@ -122,7 +135,7 @@ def _run_tool_operation(operation_id: int) -> dict:
                 raise ValueError("Unsupported tool operation")
             operation = db.get(ToolOperation, operation_id)
             operation.status = "completed"
-            operation.log = (operation.log + "\n" + message)[-20000:]
+            _append_log(operation, message)
             operation.completed_at = datetime.now(timezone.utc)
             db.commit()
             return {"status":"completed", "message":message}

@@ -2,6 +2,7 @@
 import os
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import hashlib
@@ -59,6 +60,46 @@ def is_transient_install_error(output: str) -> bool:
     ))
 
 
+def _run_build(command, *, timeout, emit, stage, **options):
+    """Show progress while a compiler is running and reap its children on timeout."""
+    started = time.monotonic()
+    with tempfile.TemporaryDirectory(prefix="surfacemap-build-log-") as directory:
+        path = Path(directory) / "build.log"
+
+        def tail():
+            with path.open("rb") as reader:
+                reader.seek(max(0, path.stat().st_size - 12000))
+                return reader.read().decode("utf-8", "replace").strip()
+
+        with path.open("wb") as output:
+            process = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT,
+                                       start_new_session=os.name == "posix", **options)
+            try:
+                while True:
+                    elapsed = time.monotonic() - started
+                    if elapsed >= timeout:
+                        raise RuntimeError(f"{stage} exceeded its {timeout:.0f}s build limit. "
+                                           f"Check Docker CPU, memory and network before retrying. {tail()[-1000:]}")
+                    try:
+                        process.wait(timeout=min(15, timeout - elapsed))
+                        return process.returncode, tail()
+                    except subprocess.TimeoutExpired:
+                        if emit:
+                            lines = tail().splitlines()
+                            detail = f" · {lines[-1][-180:]}" if lines else ""
+                            emit(f"{stage} · {int(time.monotonic() - started)}s elapsed{detail}")
+            finally:
+                if process.poll() is None:
+                    if os.name == "posix":
+                        try:
+                            os.killpg(process.pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                    else:
+                        process.kill()
+                    process.wait()
+
+
 def install_version(tool_id: str, version: str, emit=None) -> str:
     tool = TOOL_BY_ID.get(tool_id)
     if not tool:
@@ -90,7 +131,7 @@ def install_version(tool_id: str, version: str, emit=None) -> str:
     env["GOCACHE"] = str(TOOLS_ROOT / "gocache")
     if tool.id == "amass":
         env["CGO_ENABLED"] = "1"
-    command = ["go", "install"]
+    command = ["go", "install", "-p", "2"]
     if tool.id == "ffuf":
         # FFUF's upstream release build injects the tag at link time.
         package = "github.com/ffuf/ffuf/v2/pkg/ffuf"
@@ -102,23 +143,19 @@ def install_version(tool_id: str, version: str, emit=None) -> str:
         # Leave time for cleanup before Celery's 1500-second soft limit.
         deadline = time.monotonic() + 1440
         for attempt in range(3):
-            result = subprocess.run(
-                command, env=env, capture_output=True, text=True,
-                timeout=max(1, deadline - time.monotonic()), check=False,
-            )
-            output = result.stdout + result.stderr
-            log = output[-12000:]
+            code, log = _run_build(command, env=env, timeout=max(1, deadline - time.monotonic()),
+                                   emit=emit, stage=f"Building {tool.name} (attempt {attempt + 1}/3)")
             if emit and log:
                 emit(log)
-            transient = is_transient_install_error(output)
-            if not result.returncode or not transient or attempt == 2 or time.monotonic() >= deadline:
+            transient = is_transient_install_error(log)
+            if not code or not transient or attempt == 2 or time.monotonic() >= deadline:
                 break
             if emit:
                 emit("Go module download interrupted; retrying with the existing module cache.")
             time.sleep(min(2 ** (attempt + 1), max(0, deadline - time.monotonic())))
-        if result.returncode:
+        if code:
             hint = "Temporary network failure. " if transient else ""
-            raise RuntimeError(f"{hint}Go installer failed with exit code {result.returncode}: {log[-2500:]}")
+            raise RuntimeError(f"{hint}Go installer failed with exit code {code}: {log[-2500:]}")
         built = temp_dir / tool.binary
         if not built.is_file():
             raise RuntimeError("Installer completed without producing the expected executable")
@@ -138,6 +175,8 @@ def install_version(tool_id: str, version: str, emit=None) -> str:
 def _install_nmap(version: str, emit=None) -> str:
     archive_name = f"nmap-{version}.tgz"
     base_url = "https://nmap.org/dist/"
+    if emit:
+        emit(f"Downloading official Nmap {version} source and checksum.")
     with urllib.request.urlopen(base_url + archive_name, timeout=60) as response:
         archive_bytes = response.read(40 * 1024 * 1024)
     with urllib.request.urlopen(base_url + "sigs/" + archive_name + ".digest.txt", timeout=30) as response:
@@ -177,15 +216,17 @@ def _install_nmap(version: str, emit=None) -> str:
             bundle.extractall(build_root, filter="data")
         source = next(path for path in build_root.iterdir() if path.is_dir() and path.name.startswith("nmap-"))
         (source / "configure").chmod(0o755)
-        configure = subprocess.run(["./configure", f"--prefix={destination}", "--without-zenmap"], cwd=source, capture_output=True, text=True, timeout=180, check=False)
-        if configure.returncode:
-            raise RuntimeError(f"Nmap configure failed: {(configure.stdout + configure.stderr)[-2500:]}")
-        build = subprocess.run(["make", "-j2"], cwd=source, capture_output=True, text=True, timeout=900, check=False)
-        if build.returncode:
-            raise RuntimeError(f"Nmap build failed: {(build.stdout + build.stderr)[-2500:]}")
-        install = subprocess.run(["make", "install"], cwd=source, capture_output=True, text=True, timeout=180, check=False)
-        if install.returncode:
-            raise RuntimeError(f"Nmap install failed: {(install.stdout + install.stderr)[-2500:]}")
+        steps = (
+            ("Configuring Nmap", ["./configure", f"--prefix={destination}", "--without-zenmap"], 180),
+            ("Compiling Nmap", ["make", "-j2"], 900),
+            ("Installing Nmap", ["make", "install"], 180),
+        )
+        for stage, command, limit in steps:
+            if emit:
+                emit(stage)
+            code, output = _run_build(command, cwd=source, timeout=limit, emit=emit, stage=stage)
+            if code:
+                raise RuntimeError(f"{stage} failed with exit code {code}: {output[-2500:]}")
         binary = destination / "bin" / "nmap"
         alias = destination / "nmap"
         alias.symlink_to(binary)

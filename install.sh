@@ -124,14 +124,15 @@ tool_wait="${SURFACEMAP_INSTALL_TIMEOUT_SECONDS:-1800}"
 deadline=$((SECONDS + tool_wait))
 previous=
 while :; do
-  payload="$(curl -fsS --max-time 8 "$url/api/tools" || true)"
-  installed="$(printf '%s' "$payload" | grep -o '"status":"installed"' | wc -l | tr -d ' ' || true)"
-  if [ "$installed" != "$previous" ]; then
-    echo "Ready tools: ${installed:-0}/8"
-    previous="$installed"
+  progress="$(curl -fsS --max-time 12 "$url/api/tools/setup-progress" || true)"
+  progress="${progress:-Tool setup status unavailable. Check Docker with: docker compose logs --tail 50 worker api}"
+  if [ "$progress" != "$previous" ]; then
+    printf '%s\n' "$progress"
+    previous="$progress"
   fi
-  [ "$installed" = 8 ] && break
-  (( SECONDS < deadline )) || fail "Tool setup is still incomplete. Open $url and review Tool Manager, then rerun the installer."
+  [[ "$progress" == "Ready tools: 8/8" ]] && break
+  [[ "$progress" != *"Setup needs attention."* ]] || fail "SurfaceMap is running at $url. See the adapter status above."
+  (( SECONDS < deadline )) || fail "SurfaceMap is running at $url. Some tools are still pending or failed. See the last status above and Tool Manager; rerun with --use-existing-images to check again."
   sleep 5
 done
 echo "SurfaceMap and all tools are ready at $url"

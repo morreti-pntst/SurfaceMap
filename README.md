@@ -22,6 +22,8 @@ The installer reuses a working Docker setup. On Windows it can install Docker De
 
 [Docker setup for Kali](https://www.kali.org/docs/containers/installing-docker-on-kali/) · [Debian](https://docs.docker.com/engine/install/debian/) · [Ubuntu](https://docs.docker.com/engine/install/ubuntu/)
 
+During tool setup, the terminal shows the state of every missing adapter, including download and build progress. Nmap may initially show the distribution version from the container while the pinned version builds. Follow the existing operation in **Tool Manager**. If setup reports a failure, expand that operation for its log and retry from **Tool Center** after addressing the error. The dashboard stays available while tools install.
+
 If Docker and Compose are already set up, you can also start the stack directly.
 
 ```sh

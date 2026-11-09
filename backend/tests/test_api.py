@@ -306,6 +306,35 @@ def test_duplicate_rows_in_one_upload(client):
     assert response.json()["assets_created"] == 1
 
 
+def test_tool_setup_shows_existing_nmap_update_and_reuses_it(client, monkeypatch):
+    from app import main as api
+    from app.models import ToolOperation
+    from app.tool_registry import TOOLS
+
+    installed = {tool.id: tool.version.lstrip("v") for tool in TOOLS[1:4]}
+    installed["nmap"] = "7.95"
+    monkeypatch.setattr(api, "installed_version", lambda tool: installed.get(tool.id))
+    monkeypatch.setattr(api, "_dispatch_tool_operation", lambda *_: None)
+    from contextlib import closing
+    with closing(app.dependency_overrides[get_db]()) as session:
+        db = next(session)
+        operation = ToolOperation(tool_id="nmap", action="update", version=TOOLS[0].version,
+                                  status="running", log="Compiling Nmap · 30s elapsed")
+        db.add(operation)
+        db.commit()
+        operation_id = operation.id
+    response = client.post("/api/tools/nmap/operations", json={"action": "update"})
+    assert response.status_code == 202
+    assert response.json()["id"] == operation_id
+    progress = client.get("/api/tools/setup-progress")
+    assert progress.status_code == 200
+    assert "Ready tools: 3/8" in progress.text
+    assert "detected 7.95" in progress.text
+    assert "Compiling Nmap" in progress.text
+    assert "Setup needs attention." not in progress.text
+    assert len([op for op in client.get("/api/tool-operations").json() if op["tool_id"] == "nmap"]) == 1
+
+
 def test_tool_recovery_requeues_only_transient_failures(monkeypatch):
     from datetime import datetime, timedelta, timezone
     from app import tool_operations as recovery
