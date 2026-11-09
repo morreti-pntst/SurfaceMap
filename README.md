@@ -2,7 +2,9 @@
 
 **A local workspace for mapping and auditing an authorized attack surface.**
 
-[Quick start](#quick-start) · [First audit](#run-your-first-assessment) · [Commands](#terminal-commands) · [Troubleshooting](#troubleshooting) · [Licensing](#licensing)
+**English** · [Русский](README.ru.md)
+
+[Quick start](#quick-start) · [First audit](#run-your-first-assessment) · [Commands](#terminal-commands) · [Troubleshooting](#troubleshooting) · [Uninstall](#uninstall) · [Licensing](#licensing)
 
 Follow the evidence from a domain or IP address to a service, endpoint, or finding. Run a guided audit, launch individual scanners with editable presets, or import existing output.
 
