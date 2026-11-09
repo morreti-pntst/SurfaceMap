@@ -14,7 +14,9 @@ fi
 "${docker_cli[@]}" compose -f compose.yaml down --remove-orphans --volumes --rmi local
 
 link="$HOME/.local/bin/surfacemap"
-if [[ -L "$link" && "$link" -ef "$project/surfacemap" ]]; then
+shim="$(printf '#!/usr/bin/env bash\n# SurfaceMap CLI\nexec bash %q "$@"\n' "$project/surfacemap")"
+if [[ -L "$link" && "$link" -ef "$project/surfacemap" ]] ||
+   { [[ ! -L "$link" && -f "$link" ]] && cmp -s -- "$link" <(printf '%s\n' "$shim"); }; then
   rm -- "$link"
   for config in "$HOME/.bashrc" "${ZDOTDIR:-$HOME}/.zshrc"; do
     [[ -f "$config" ]] || continue

@@ -1,0 +1,123 @@
+SurfaceMap Community License v1.0
+
+Copyright (c) 2026 SurfaceMap contributors
+
+1. Definitions
+
+"Licensor" means each copyright holder, or its authorized representative,
+that offers material under this License, solely to the extent it may grant
+the relevant rights. "You" means the individual or entity exercising those
+rights. "Covered Material" means the original SurfaceMap code and
+documentation offered under this License and the copyrightable portions
+of that material retained in a modified version, in source or object form.
+It excludes third-party material governed by separate terms and material
+available to You under an independent license to the extent You rely on
+that license. "Modified Version" means a version that adapts or incorporates
+Covered Material in a manner that requires the Licensor's permission.
+"Distribution" means providing a copy to another person or entity.
+"Payment" means money or other consideration required to obtain a copy,
+access the program, or use its functionality.
+
+2. Grant and permitted use
+
+Subject to this License, each Licensor grants You a worldwide, royalty-free,
+nonexclusive copyright license to download, install, run, copy, study,
+modify, and create Modified Versions of the Covered Material, and to
+publish and distribute it and Modified Versions in source or object form
+without Payment. You may host an instance and provide access without
+Payment, subject to Sections 3 and 4.
+
+You may use the software internally in a business and charge for work
+performed using it, including penetration testing, security audits,
+consulting, and instruction. You may give clients reports and findings
+produced in that work. Using the software to produce a paid deliverable or
+demonstrating it in paid instruction is permitted. Charging the client to
+obtain a copy, use the program, or access its functionality is subject to
+Section 3. You may accept voluntary donations that confer no entitlement
+to a copy, access, features, or other software benefits.
+
+3. Commercial distribution and paid access
+
+Unless You have an agreement under Section 5, You may not sell or resell
+the Covered Material or a Modified Version, distribute copies for Payment,
+charge for access to a hosted instance or its functionality, or require a
+subscription, paid membership, paid download, or other Payment as a
+condition of obtaining a copy or using it.
+
+The same restriction applies when the Covered Material or its functionality
+is supplied as part of what a customer pays for in a bundled product or
+service, including when its price is presented as zero or itemized
+separately. Renaming, repackaging, wrapping, or changing the interface does
+not change these conditions. Merely using the software to perform the
+paid professional work described in Section 2 remains permitted.
+
+4. Distribution, notices, and modifications
+
+When distributing any Covered Material or Modified Version, include this
+License and preserve applicable copyright, attribution, and license
+notices. Identify material modifications in a reasonably visible notice
+and avoid representing an unofficial build or fork as an official
+SurfaceMap release. Pass on the Covered Material under this License and
+do not impose terms that purport to remove recipients' rights under it.
+The commercial restrictions continue to apply to the Covered Material
+included in a Modified Version.
+
+You retain whatever rights You hold in Your original additions. You may
+license those additions separately subject to the preceding conditions
+for the Covered Material. This License does not transfer ownership of
+any contribution or restrict independently developed software that does
+not use the Covered Material. Recipients receive the license to the
+Covered Material directly from the applicable Licensor.
+
+5. Separate commercial agreement
+
+Commercial distribution or paid access described in Section 3 requires a
+separate written agreement signed by You and the holders of the relevant
+rights or their authorized representatives before the activity begins.
+Contact the project through the procedure in COMMERCIAL.md. No request,
+negotiation, silence, or unsolicited payment grants permission.
+
+6. Termination and cure
+
+Your permissions under this License terminate automatically upon breach.
+If You cease the breach and cure it within 30 days after becoming aware
+of it or receiving notice, whichever comes first, Your permissions are
+reinstated from the date of cure, unless You previously had a breach of
+this License for the same Covered Material or an applicable Licensor
+expressly denies reinstatement in writing. In other cases, reinstatement
+requires written permission from the applicable Licensor. Reinstatement
+does not waive remedies for past breaches. Licenses of downstream
+recipients who comply with their terms remain in effect. Sections 7
+through 9 survive termination.
+
+7. Third-party rights and marks
+
+Third-party components, data, and dependencies remain subject to their
+own terms. This License grants no rights to material a Licensor is not
+entitled to license and does not supersede permissions previously granted
+under separate terms. It grants no patent or trademark license and no
+right to use project names, logos, or marks except for attribution or
+other use permitted by applicable law.
+
+8. Disclaimer and limitation of liability
+
+To the maximum extent permitted by applicable law, the Covered Material
+is provided "AS IS" and "AS AVAILABLE", without warranties or conditions
+of any kind, whether express, implied, or statutory, including
+merchantability, fitness for a particular purpose, title, and
+noninfringement. To the maximum extent permitted by applicable law, no
+Licensor or contributor is liable for damages or losses arising from this
+License or the use of, or inability to use, the Covered Material, under
+any theory of liability, even if advised of the possibility. This includes
+direct, indirect, incidental, consequential, special, and exemplary
+damages, loss of data, and lost profits. Rights and liabilities that
+applicable law does not allow the parties to exclude or limit are
+unaffected.
+
+9. Applicable law and severability
+
+This License selects no particular governing law, forum, or dispute
+resolution procedure. Questions of applicable law and jurisdiction are
+determined under the rules of the competent forum. If a provision is
+unenforceable, it applies to the extent permitted by law and the
+remaining provisions continue to apply.

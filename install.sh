@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")"
+cd -P "$(dirname "${BASH_SOURCE[0]}")"
 
 fail() { printf '%s\n' "$*" >&2; exit 1; }
 privileged() {
@@ -14,26 +14,34 @@ register_cli() {
   local link="$bin/surfacemap" shell_config current_shell="${SHELL:-/bin/bash}"
   local path_line='export PATH="$HOME/.local/bin:$PATH"'
   mkdir -p "$bin"
-  if [[ -e "$link" ]] && [[ ! "$link" -ef "$source" ]]; then
+  local shim
+  shim="$(printf '#!/usr/bin/env bash\n# SurfaceMap CLI\nexec bash %q "$@"\n' "$source")"
+  if [[ -L "$link" && "$link" -ef "$source" ]] || [[ ! -e "$link" && ! -L "$link" ]]; then
+    local temporary
+    temporary="$(mktemp "$bin/.surfacemap.XXXXXX")"
+    printf '%s\n' "$shim" > "$temporary"
+    chmod 755 "$temporary"
+    mv -fT -- "$temporary" "$link"
+  elif [[ -L "$link" ]] || ! cmp -s -- "$link" <(printf '%s\n' "$shim"); then
     fail "A different surfacemap command exists at $link. Move it before registering this installation."
+  else
+    chmod u+x "$link"
   fi
-  [[ -x "$source" ]] || chmod +x "$source"
-  [[ -e "$link" ]] || ln -sfn -- "$source" "$link"
+  if [[ ! -x "$source" ]] && ! chmod u+x "$source"; then
+    echo 'The project folder is read-only. Use surfacemap or bash ./surfacemap instead.'
+  fi
+
+  case "${current_shell##*/}" in
+    bash) shell_config="$HOME/.bashrc" ;;
+    zsh) shell_config="${ZDOTDIR:-$HOME}/.zshrc" ;;
+  esac
+  if [[ -n "${shell_config:-}" ]]; then
+    grep -Fqx -- "$path_line" "$shell_config" 2>/dev/null ||
+      printf '\n# SurfaceMap command\n%s\n' "$path_line" >> "$shell_config"
+  fi
   case ":$PATH:" in
     *":$bin:"*) ;;
-    *)
-      case "${current_shell##*/}" in
-        bash) shell_config="$HOME/.bashrc" ;;
-        zsh) shell_config="${ZDOTDIR:-$HOME}/.zshrc" ;;
-      esac
-      if [[ -n "${shell_config:-}" ]]; then
-        grep -Fqx -- "$path_line" "$shell_config" 2>/dev/null ||
-          printf '\n# SurfaceMap command\n%s\n' "$path_line" >> "$shell_config"
-        echo 'Open a new terminal to use the surfacemap command.'
-      else
-        echo "Add $bin to your shell PATH to use the surfacemap command."
-      fi
-      ;;
+    *) echo 'Open a new terminal, or run: export PATH="$HOME/.local/bin:$PATH"; hash -r' ;;
   esac
   echo 'SurfaceMap CLI: surfacemap help'
 }
@@ -46,6 +54,8 @@ case "${1:-}" in
   --register-cli) register_cli; exit 0 ;;
   *) fail 'Usage: bash ./install.sh [--use-existing-images|--register-cli]' ;;
 esac
+
+register_cli
 
 has_compose() {
   docker compose up --help 2>/dev/null | grep -- '--wait-timeout' >/dev/null
@@ -116,7 +126,6 @@ fi
 binding="$("${compose[@]}" port web 80)"
 url="http://127.0.0.1:${binding##*:}"
 echo "Dashboard: $url"
-register_cli
 echo 'Full stop: surfacemap stop'
 
 tool_wait="${SURFACEMAP_INSTALL_TIMEOUT_SECONDS:-1800}"
